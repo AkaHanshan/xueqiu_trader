@@ -18,7 +18,7 @@ import time
 import queue
 import secrets
 from datetime import datetime
-from flask import Flask, render_template, jsonify, request, Response, redirect, url_for
+from flask import Flask, render_template, jsonify, request, Response, redirect, url_for, stream_with_context
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from collections import deque
 
@@ -189,6 +189,7 @@ def read_process_output(process, script_id):
 
 def generate_sse_stream():
     """生成SSE事件流"""
+    import traceback
     q = queue.Queue()
     
     with sse_lock:
@@ -226,15 +227,17 @@ def generate_sse_stream():
                 # 发送心跳保持连接
                 yield f": heartbeat\n\n"
     except GeneratorExit:
-        pass
+        print("SSE 生成器被关闭 (GeneratorExit)")
     except Exception as e:
-        import traceback
+        # 关键：手动把生成器里的错误打出来
+        print("\n!!! SSE 生成器崩溃 !!!")
         traceback.print_exc()
         yield f"event: error\ndata: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
     finally:
         with sse_lock:
             if q in sse_subscribers:
                 sse_subscribers.remove(q)
+        print("SSE 连接已清理")
 
 
 @app.route("/api/logs/stream")
@@ -242,7 +245,7 @@ def generate_sse_stream():
 def log_stream():
     """SSE日志流端点"""
     return Response(
-        generate_sse_stream(),
+        stream_with_context(generate_sse_stream()),  # 使用 stream_with_context 保持请求上下文
         mimetype='text/event-stream; charset=utf-8',
         headers={
             'Cache-Control': 'no-cache, no-store, must-revalidate',
