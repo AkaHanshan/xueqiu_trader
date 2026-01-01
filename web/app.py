@@ -245,15 +245,15 @@ def generate_sse_stream():
 @app.route("/api/logs/stream")
 @login_required
 def log_stream():
-    """SSE日志流端点 - Waitress 兼容版"""
+    """SSE日志流端点 - 修复 PEP 3333 协议冲突"""
     return Response(
         stream_with_context(generate_sse_stream()),
-        mimetype='text/event-stream',  # 不要加 charset=utf-8，标准 SSE 不需要
+        mimetype='text/event-stream',
         headers={
             'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive',
-            'X-Accel-Buffering': 'no'  # 仅保留 Nginx 加速
-            # 移除 Transfer-Encoding: chunked，Waitress 会自动处理
+            # Connection 是 hop-by-hop header，不能由 WSGI 应用设置 (PEP 3333)
+            # Waitress 会自动处理连接保活
+            'X-Accel-Buffering': 'no'  # 仅保留针对 Nginx 的优化头
         }
     )
 
