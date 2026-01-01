@@ -1,0 +1,11 @@
+{
+    "cookies": "YOUR_XUEQIU_COOKIES_HERE",
+    "portfolio_code": "ZH000000",
+    "target_portfolio_code": "ZH000000",
+    "simulator_gid": 0,
+    "my_portfolio_code": [],
+    "portfolio_market": "cn",
+    "initial_assets": 1000000,
+    "track_interval": 30,
+    "trade_cmd_expire_seconds": 120
+}

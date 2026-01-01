@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>雪球交易系统 - 管理后台</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+
+<body>
+    <div class="container">
+        <!-- 头部 -->
+        <header>
+            <h1>🐂 雪球交易系统 - 管理后台</h1>
+            <div class="status-badge">
+                <span class="status-dot"></span>
+                <span>系统运行中</span>
+            </div>
+        </header>
+
+        <div class="grid">
+            <!-- 配置管理 -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">⚙️ 配置管理</h3>
+                    <button class="btn btn-primary" onclick="saveConfig()">保存配置</button>
+                </div>
+                <form id="configForm">
+                    <div class="form-group">
+                        <label>组合代码</label>
+                        <div class="input-row">
+                            <input type="text" id="portfolio_code" placeholder="ZH1783962">
+                            <button type="button" class="btn btn-icon btn-sm"
+                                onclick="showPortfolioDetail('portfolio_code')">📊</button>
+                        </div>
+                        <div class="portfolio-name" id="name-portfolio_code"
+                            onclick="showPortfolioDetail('portfolio_code')"></div>
+                    </div>
+                    <div class="form-group">
+                        <label>目标组合</label>
+                        <div class="input-row">
+                            <input type="text" id="target_portfolio_code" placeholder="ZH1783962">
+                            <button type="button" class="btn btn-icon btn-sm"
+                                onclick="showPortfolioDetail('target_portfolio_code')">📊</button>
+                        </div>
+                        <div class="portfolio-name" id="name-target_portfolio_code"
+                            onclick="showPortfolioDetail('target_portfolio_code')"></div>
+                    </div>
+                    <div class="form-group">
+                        <label>模拟仓 GID</label>
+                        <div class="input-row">
+                            <input type="text" id="simulator_gid" placeholder="6522325211190960">
+                            <button type="button" class="btn btn-icon btn-sm"
+                                onclick="showSimulatorDetail()">📊</button>
+                        </div>
+                        <div class="portfolio-name" id="name-simulator_gid"></div>
+                    </div>
+                    <div class="form-group">
+                        <label>初始资产</label>
+                        <input type="number" id="initial_assets" placeholder="1000000">
+                    </div>
+                    <div class="form-group">
+                        <label>轮询间隔 (秒)</label>
+                        <input type="number" id="track_interval" placeholder="30">
+                    </div>
+                    <div class="form-group">
+                        <label>我的组合列表</label>
+                        <div class="input-row">
+                            <input type="text" id="my_portfolio_code" placeholder="ZH3562685">
+                            <button type="button" class="btn btn-icon btn-sm"
+                                onclick="showMyPortfolioDetail()">📊</button>
+                        </div>
+                        <div class="portfolio-name" id="name-my_portfolio_code"></div>
+                    </div>
+                    <div class="form-group">
+                        <label>Cookies</label>
+                        <textarea id="cookies" placeholder="登录雪球后复制的 cookies"></textarea>
+                    </div>
+                </form>
+            </div>
+
+            <!-- 脚本控制 -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">🚀 脚本控制 & 日志</h3>
+                </div>
+
+                <!-- 自动跟踪同步 -->
+                <div class="script-card" id="card-auto_track">
+                    <div class="script-header" onclick="toggleLog('auto_track')">
+                        <div class="script-info">
+                            <h4>自动跟踪同步</h4>
+                            <p>监控目标组合变化，自动同步到模拟仓</p>
+                        </div>
+                        <div class="script-controls">
+                            <span class="running-badge" id="badge-auto_track" style="display:none">运行中</span>
+                            <button class="btn btn-success btn-sm" id="btn-auto_track"
+                                onclick="event.stopPropagation(); toggleScript('auto_track')">启动</button>
+                        </div>
+                    </div>
+                    <div class="script-log" id="log-auto_track">
+                        <div class="log-header">
+                            <span>📄 自动跟踪同步 日志</span>
+                            <button class="btn btn-secondary btn-sm"
+                                onclick="event.stopPropagation(); clearLog('auto_track')">清空</button>
+                        </div>
+                        <div class="log-content" id="content-auto_track">
+                            <div class="empty-log">暂无日志</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 模拟仓操作 -->
+                <div class="script-card" id="card-simulator">
+                    <div class="script-header" onclick="toggleLog('simulator')">
+                        <div class="script-info">
+                            <h4>模拟仓操作</h4>
+                            <p>模拟仓交易演示</p>
+                        </div>
+                        <div class="script-controls">
+                            <span class="running-badge" id="badge-simulator" style="display:none">运行中</span>
+                            <button class="btn btn-success btn-sm" id="btn-simulator"
+                                onclick="event.stopPropagation(); toggleScript('simulator')">启动</button>
+                        </div>
+                    </div>
+                    <div class="script-log" id="log-simulator">
+                        <div class="log-header">
+                            <span>📄 模拟仓操作 日志</span>
+                            <button class="btn btn-secondary btn-sm"
+                                onclick="event.stopPropagation(); clearLog('simulator')">清空</button>
+                        </div>
+                        <div class="log-content" id="content-simulator">
+                            <div class="empty-log">暂无日志</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 组合跟踪 -->
+                <div class="script-card" id="card-follower">
+                    <div class="script-header" onclick="toggleLog('follower')">
+                        <div class="script-info">
+                            <h4>组合跟踪</h4>
+                            <p>跟踪雪球组合调仓信号</p>
+                        </div>
+                        <div class="script-controls">
+                            <span class="running-badge" id="badge-follower" style="display:none">运行中</span>
+                            <button class="btn btn-success btn-sm" id="btn-follower"
+                                onclick="event.stopPropagation(); toggleScript('follower')">启动</button>
+                        </div>
+                    </div>
+                    <div class="script-log" id="log-follower">
+                        <div class="log-header">
+                            <span>📄 组合跟踪 日志</span>
+                            <button class="btn btn-secondary btn-sm"
+                                onclick="event.stopPropagation(); clearLog('follower')">清空</button>
+                        </div>
+                        <div class="log-content" id="content-follower">
+                            <div class="empty-log">暂无日志</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 交易演示 -->
+                <div class="script-card" id="card-trader">
+                    <div class="script-header" onclick="toggleLog('trader')">
+                        <div class="script-info">
+                            <h4>交易演示</h4>
+                            <p>组合调仓交易演示</p>
+                        </div>
+                        <div class="script-controls">
+                            <span class="running-badge" id="badge-trader" style="display:none">运行中</span>
+                            <button class="btn btn-success btn-sm" id="btn-trader"
+                                onclick="event.stopPropagation(); toggleScript('trader')">启动</button>
+                        </div>
+                    </div>
+                    <div class="script-log" id="log-trader">
+                        <div class="log-header">
+                            <span>📄 交易演示 日志</span>
+                            <button class="btn btn-secondary btn-sm"
+                                onclick="event.stopPropagation(); clearLog('trader')">清空</button>
+                        </div>
+                        <div class="log-content" id="content-trader">
+                            <div class="empty-log">暂无日志</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 系统日志 -->
+        <div class="card system-log">
+            <div class="card-header">
+                <h3 class="card-title">📋 系统日志</h3>
+                <button class="btn btn-secondary btn-sm" onclick="clearSystemLog()">清空</button>
+            </div>
+            <div class="log-content" id="system-log">
+                <div class="empty-log">等待系统日志...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 详情弹窗 -->
+    <div class="modal-overlay" id="modal" onclick="closeModal(event)">
+        <div class="modal" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h3 id="modal-title">详情</h3>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="modal-body">
+                <div class="loading">加载中...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast 通知 -->
+    <div id="toast" class="toast"></div>
+
+    <!-- JavaScript -->
+    <script src="/static/js/app.js"></script>
+</body>
+
+</html>
