@@ -153,6 +153,21 @@
             首次使用请运行 <code>python scripts/create_user.py</code> 创建用户
         </div>
     </div>
+
+    <script>
+        // 当用户到达登录页时，关闭任何可能残留的 SSE 连接
+        // 这可以防止登出后 SSE 不断重连的问题
+        (function () {
+            // 检查是否有从主页跳转过来残留的 EventSource
+            if (window.eventSource) {
+                window.eventSource.close();
+                window.eventSource = null;
+            }
+            // 设置全局标记，防止任何 SSE 重连
+            window.sseIntentionallyClosed = true;
+            console.log('登录页已加载，SSE 连接已关闭');
+        })();
+    </script>
 </body>
 
 </html>

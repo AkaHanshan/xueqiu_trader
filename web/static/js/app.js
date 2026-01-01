@@ -34,6 +34,7 @@ function toast(msg, type = 'success') {
 
 // ============ 日志管理 (SSE) ============
 let eventSource = null;
+let sseIntentionallyClosed = false;  // 标记是否是主动关闭
 
 function toggleLog(id) {
     document.getElementById(`log-${id}`).classList.toggle('expanded');
@@ -89,11 +90,23 @@ function appendToContainer(containerId, log) {
     }
 }
 
+function closeSSE() {
+    /**
+     * 主动关闭SSE连接，阻止自动重连
+     */
+    sseIntentionallyClosed = true;
+    if (eventSource) {
+        eventSource.close();
+        eventSource = null;
+    }
+}
+
 function connectSSE() {
     if (eventSource) {
         eventSource.close();
     }
 
+    sseIntentionallyClosed = false;  // 重置标记
     eventSource = new EventSource('/api/logs/stream');
 
     // 监听日志事件
@@ -116,7 +129,27 @@ function connectSSE() {
         }
     });
 
-    eventSource.onerror = function (e) {
+    eventSource.onerror = async function (e) {
+        // 如果是主动关闭或页面即将卸载，不重连
+        if (sseIntentionallyClosed) {
+            console.log('SSE连接已主动关闭，不再重连');
+            return;
+        }
+
+        // 检查是否是认证问题（401）
+        // EventSource 不暴露状态码，所以用 fetch 检测
+        try {
+            const res = await fetch('/api/scripts', { method: 'GET' });
+            if (res.status === 401) {
+                console.log('认证失效，跳转到登录页');
+                closeSSE();  // 停止重连
+                window.location.href = '/login';
+                return;
+            }
+        } catch (err) {
+            console.error('检查认证状态失败', err);
+        }
+
         console.error('SSE连接错误，5秒后重连...');
         eventSource.close();
         setTimeout(connectSSE, 5000);
@@ -124,6 +157,9 @@ function connectSSE() {
 
     console.log('SSE事件流已连接');
 }
+
+// 页面卸载/跳转时关闭SSE连接
+window.addEventListener('beforeunload', closeSSE);
 
 // ============ 脚本控制 ============
 async function toggleScript(id) {
