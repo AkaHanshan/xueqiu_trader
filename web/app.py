@@ -104,12 +104,15 @@ AVAILABLE_SCRIPTS = {
 
 def add_log(level: str, message: str, script: str = "system"):
     """添加日志到缓存、数据库并广播给SSE订阅者（双通道）"""
+    # 强制清理消息中的非法字符，确保 JSON 序列化安全
+    safe_message = str(message).replace('\x00', '').strip()
+    
     log_entry = {
         "type": "log",
         "time": datetime.now().strftime("%H:%M:%S"),
         "level": level,
         "script": script,
-        "message": str(message)  # 强转字符串，防止序列化错误
+        "message": safe_message
     }
     
     with log_lock:
@@ -118,7 +121,7 @@ def add_log(level: str, message: str, script: str = "system"):
     # 持久化到数据库（线程安全）
     try:
         with app.app_context():
-            SystemLog.add(level=level, message=message, module=script)
+            SystemLog.add(level=level, message=safe_message, module=script)
     except Exception as e:
         print(f"日志写入数据库失败: {e}")
     
@@ -188,7 +191,7 @@ def read_process_output(process, script_id):
 
 
 def generate_sse_stream():
-    """生成SSE事件流"""
+    """生成SSE事件流 - Waitress 优化版"""
     import traceback
     q = queue.Queue()
     
@@ -196,15 +199,12 @@ def generate_sse_stream():
         sse_subscribers.append(q)
     
     try:
-        # 先发送历史日志
+        # 1. 先发送历史日志
         with log_lock:
             for log in log_buffer:
-                try:
-                    yield f"event: log\ndata: {json.dumps(log, ensure_ascii=False)}\n\n"
-                except Exception as e:
-                    print(f"历史日志序列化失败: {e}")
+                yield f"event: log\ndata: {json.dumps(log, ensure_ascii=False)}\n\n"
         
-        # 发送当前脚本状态
+        # 2. 发送当前脚本状态
         scripts = []
         for script_id, info in AVAILABLE_SCRIPTS.items():
             scripts.append({
@@ -214,44 +214,46 @@ def generate_sse_stream():
             })
         yield f"event: script_status\ndata: {json.dumps({'type': 'script_status', 'scripts': scripts}, ensure_ascii=False)}\n\n"
         
-        # 持续推送新事件
+        # 3. 持续推送循环
         while True:
             try:
-                event = q.get(timeout=30)  # 30秒超时发送心跳
+                # 将超时时间缩短到 15 秒，确保 Waitress 线程活跃
+                event = q.get(timeout=15)
                 event_type = event.get("type", "log")
-                try:
-                    yield f"event: {event_type}\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
-                except Exception as e:
-                    print(f"SSE事件序列化失败: {e}, Event: {event}")
+                payload = json.dumps(event, ensure_ascii=False)
+                yield f"event: {event_type}\ndata: {payload}\n\n"
             except queue.Empty:
-                # 发送心跳保持连接
-                yield f": heartbeat\n\n"
+                # 关键：发送心跳注释行，这是 SSE 标准，不会被前端解析但能保活连接
+                yield ": heartbeat\n\n"
+            except Exception as e:
+                # 记录序列化错误但不跳出循环
+                print(f"SSE 序列化异常: {e}")
+                continue
+
     except GeneratorExit:
-        print("SSE 生成器被关闭 (GeneratorExit)")
+        # 正常连接关闭，不要抛出异常
+        pass
     except Exception as e:
-        # 关键：手动把生成器里的错误打出来
-        print("\n!!! SSE 生成器崩溃 !!!")
+        print("\n!!! SSE 生成器运行时崩溃 !!!")
         traceback.print_exc()
-        yield f"event: error\ndata: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
     finally:
         with sse_lock:
             if q in sse_subscribers:
                 sse_subscribers.remove(q)
-        print("SSE 连接已清理")
 
 
 @app.route("/api/logs/stream")
 @login_required
 def log_stream():
-    """SSE日志流端点"""
+    """SSE日志流端点 - Waitress 兼容版"""
     return Response(
-        stream_with_context(generate_sse_stream()),  # 使用 stream_with_context 保持请求上下文
-        mimetype='text/event-stream; charset=utf-8',
+        stream_with_context(generate_sse_stream()),
+        mimetype='text/event-stream',  # 不要加 charset=utf-8，标准 SSE 不需要
         headers={
-            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Cache-Control': 'no-cache',
             'Connection': 'keep-alive',
-            'X-Accel-Buffering': 'no',  # 禁用 Nginx 缓冲
-            'Transfer-Encoding': 'chunked'  # 明确使用分块传输
+            'X-Accel-Buffering': 'no'  # 仅保留 Nginx 加速
+            # 移除 Transfer-Encoding: chunked，Waitress 会自动处理
         }
     )
 
