@@ -109,7 +109,7 @@ def add_log(level: str, message: str, script: str = "system"):
         "time": datetime.now().strftime("%H:%M:%S"),
         "level": level,
         "script": script,
-        "message": message
+        "message": str(message)  # 强转字符串，防止序列化错误
     }
     
     with log_lock:
@@ -198,7 +198,10 @@ def generate_sse_stream():
         # 先发送历史日志
         with log_lock:
             for log in log_buffer:
-                yield f"event: log\ndata: {json.dumps(log, ensure_ascii=False)}\n\n"
+                try:
+                    yield f"event: log\ndata: {json.dumps(log, ensure_ascii=False)}\n\n"
+                except Exception as e:
+                    print(f"历史日志序列化失败: {e}")
         
         # 发送当前脚本状态
         scripts = []
@@ -215,12 +218,19 @@ def generate_sse_stream():
             try:
                 event = q.get(timeout=30)  # 30秒超时发送心跳
                 event_type = event.get("type", "log")
-                yield f"event: {event_type}\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
+                try:
+                    yield f"event: {event_type}\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
+                except Exception as e:
+                    print(f"SSE事件序列化失败: {e}, Event: {event}")
             except queue.Empty:
                 # 发送心跳保持连接
                 yield f": heartbeat\n\n"
     except GeneratorExit:
         pass
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        yield f"event: error\ndata: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
     finally:
         with sse_lock:
             if q in sse_subscribers:

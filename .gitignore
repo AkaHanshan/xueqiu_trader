@@ -49,3 +49,6 @@ Thumbs.db
 .coverage
 htmlcov/
 .pytest_cache/
+
+# 测试脚本
+tests/
