@@ -35,6 +35,9 @@ function toast(msg, type = 'success') {
 // ============ 日志管理 (SSE) ============
 let eventSource = null;
 let sseIntentionallyClosed = false;  // 标记是否是主动关闭
+let sseConnected = false;  // SSE 是否已连接
+let pollingInterval = null;  // 轮询定时器（SSE 失效时的回退方案）
+const POLLING_INTERVAL_MS = 5000;  // 轮询间隔 5 秒
 
 function toggleLog(id) {
     document.getElementById(`log-${id}`).classList.toggle('expanded');
@@ -151,11 +154,18 @@ function connectSSE() {
         }
 
         console.error('SSE连接错误，5秒后重连...');
+        sseConnected = false;
+        startPollingFallback();  // 启动轮询回退
         eventSource.close();
         setTimeout(connectSSE, 5000);
     };
 
-    console.log('SSE事件流已连接');
+    // SSE 成功连接后的回调
+    eventSource.onopen = function () {
+        console.log('SSE事件流已连接');
+        sseConnected = true;
+        stopPollingFallback();  // 停止轮询
+    };
 }
 
 // 页面卸载/跳转时关闭SSE连接
@@ -508,6 +518,32 @@ async function fetchScriptStatus() {
         }
     } catch (e) {
         console.error('获取脚本状态失败', e);
+    }
+}
+
+function startPollingFallback() {
+    /**
+     * 启动轮询回退机制（当 SSE 失效时）
+     */
+    if (pollingInterval) return;  // 已在轮询中
+    console.log('SSE 失效，启动轮询回退机制');
+    pollingInterval = setInterval(async () => {
+        if (sseConnected) {
+            stopPollingFallback();
+            return;
+        }
+        await fetchScriptStatus();
+    }, POLLING_INTERVAL_MS);
+}
+
+function stopPollingFallback() {
+    /**
+     * 停止轮询回退
+     */
+    if (pollingInterval) {
+        console.log('SSE 已恢复，停止轮询');
+        clearInterval(pollingInterval);
+        pollingInterval = null;
     }
 }
 
