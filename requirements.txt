@@ -1,1 +1,10 @@
+# 核心依赖
 requests>=2.25.0
+
+# Web 框架
+Flask>=2.0.0
+Flask-SQLAlchemy>=3.0.0
+Flask-Login>=0.6.0
+
+# 数据库
+SQLAlchemy>=2.0.0
