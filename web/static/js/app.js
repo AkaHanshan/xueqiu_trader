@@ -458,16 +458,34 @@ async function loadHistoricalLogs() {
     }
 }
 
+async function fetchScriptStatus() {
+    /**
+     * 从 API 获取脚本状态（页面加载时使用）
+     * 确保即使 SSE 连接有问题，也能正确显示状态
+     */
+    try {
+        const res = await fetch('/api/scripts');
+        const data = await res.json();
+        if (data.success && data.scripts) {
+            updateScriptUI(data.scripts);
+            console.log('脚本状态已加载');
+        }
+    } catch (e) {
+        console.error('获取脚本状态失败', e);
+    }
+}
+
 async function init() {
     loadConfig();
 
-    // 先加载历史日志（页面刷新后日志不丢失）
+    // 先获取脚本当前状态（确保按钮显示正确）
+    await fetchScriptStatus();
+
+    // 加载历史日志（页面刷新后日志不丢失）
     await loadHistoricalLogs();
 
-    // 连接SSE事件流（日志+脚本状态）
+    // 连接SSE事件流（日志+脚本状态实时更新）
     connectSSE();
-
-    // 零轮询！所有状态通过SSE推送
 }
 
 // DOM 加载完成后初始化
