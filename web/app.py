@@ -7,6 +7,7 @@
 - 脚本启停控制
 - 实时日志显示 (SSE)
 - 日志持久化
+- 用户登录认证
 """
 import json
 import os
@@ -15,8 +16,10 @@ import sys
 import threading
 import time
 import queue
+import secrets
 from datetime import datetime
-from flask import Flask, render_template, jsonify, request, Response
+from flask import Flask, render_template, jsonify, request, Response, redirect, url_for
+from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from collections import deque
 
 # 获取项目根目录
@@ -34,12 +37,34 @@ app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{os.path.join(DATA_DIR, "xueqiu_trader.db")}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+# Flask-Login 配置
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
+
 # 确保可以导入 web 模块
 sys.path.insert(0, BASE_DIR)
 
 # 初始化数据库
-from models import db, init_db, SystemLog, UserConfig
+from models import db, init_db, SystemLog, UserConfig, User
 init_db(app)
+
+# 初始化 Flask-Login
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+login_manager.login_message = '请先登录'
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
+
+@app.before_request
+def require_login():
+    """保护所有 /api 路由（登录接口除外）"""
+    exempt_routes = ['login', 'static']
+    if request.endpoint and request.endpoint not in exempt_routes:
+        if request.path.startswith('/api') and not current_user.is_authenticated:
+            return jsonify({"success": False, "error": "请先登录"}), 401
 
 # 存储运行中的进程
 running_processes = {}
@@ -203,6 +228,7 @@ def generate_sse_stream():
 
 
 @app.route("/api/logs/stream")
+@login_required
 def log_stream():
     """SSE日志流端点"""
     return Response(
@@ -216,13 +242,46 @@ def log_stream():
     )
 
 
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    """登录页面"""
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+    
+    if request.method == "POST":
+        username = request.form.get("username")
+        password = request.form.get("password")
+        
+        user = User.query.filter_by(username=username).first()
+        if user and user.check_password(password):
+            login_user(user, remember=True)
+            user.last_login = datetime.utcnow()
+            db.session.commit()
+            next_page = request.args.get('next')
+            return redirect(next_page or url_for('index'))
+        
+        return render_template("login.html", error="用户名或密码错误")
+    
+    return render_template("login.html")
+
+
+@app.route("/logout")
+@login_required
+def logout():
+    """登出"""
+    logout_user()
+    return redirect(url_for('login'))
+
+
 @app.route("/")
+@login_required
 def index():
     """主页"""
     return render_template("index.html")
 
 
 @app.route("/api/config", methods=["GET"])
+@login_required
 def get_config():
     """获取配置"""
     try:

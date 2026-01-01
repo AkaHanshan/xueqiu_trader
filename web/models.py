@@ -6,6 +6,8 @@
 """
 from datetime import datetime
 from flask_sqlalchemy import SQLAlchemy
+from flask_login import UserMixin
+from werkzeug.security import generate_password_hash, check_password_hash
 import json
 import threading
 
@@ -13,6 +15,38 @@ db = SQLAlchemy()
 
 # 线程安全锁（用于日志写入）
 _log_lock = threading.Lock()
+
+
+class User(UserMixin, db.Model):
+    """用户表 - Flask-Login 认证"""
+    __tablename__ = 'user'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    password_hash = db.Column(db.String(256), nullable=False)
+    is_admin = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    last_login = db.Column(db.DateTime)
+    
+    def __repr__(self):
+        return f'<User {self.username}>'
+    
+    def set_password(self, password):
+        """设置密码（哈希存储）"""
+        self.password_hash = generate_password_hash(password)
+    
+    def check_password(self, password):
+        """验证密码"""
+        return check_password_hash(self.password_hash, password)
+    
+    @classmethod
+    def create_user(cls, username, password, is_admin=False):
+        """创建用户"""
+        user = cls(username=username, is_admin=is_admin)
+        user.set_password(password)
+        db.session.add(user)
+        db.session.commit()
+        return user
 
 
 class UserConfig(db.Model):
