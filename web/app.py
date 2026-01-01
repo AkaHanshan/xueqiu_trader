@@ -243,11 +243,12 @@ def log_stream():
     """SSE日志流端点"""
     return Response(
         generate_sse_stream(),
-        mimetype='text/event-stream',
+        mimetype='text/event-stream; charset=utf-8',
         headers={
-            'Cache-Control': 'no-cache',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
             'Connection': 'keep-alive',
-            'X-Accel-Buffering': 'no'
+            'X-Accel-Buffering': 'no',  # 禁用 Nginx 缓冲
+            'Transfer-Encoding': 'chunked'  # 明确使用分块传输
         }
     )
 
