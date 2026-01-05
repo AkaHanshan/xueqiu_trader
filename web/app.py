@@ -325,17 +325,59 @@ def save_config():
         with open(CONFIG_PATH, "r", encoding="utf-8") as f:
             config = json.load(f)
         
+        # 检查 cookies 是否变化（用于判断是否需要重启脚本）
+        old_cookies = config.get("cookies", "")
+        new_cookies = data.get("cookies", "")
+        cookies_changed = old_cookies != new_cookies
+        
         # 更新配置（不覆盖未提供的字段）
         for key, value in data.items():
             if key != "cookies_preview":  # 跳过预览字段
                 config[key] = value
         
-        # 保存配置
+        # 保存到 JSON 文件
         with open(CONFIG_PATH, "w", encoding="utf-8") as f:
             json.dump(config, f, ensure_ascii=False, indent=4)
         
-        add_log("info", "配置已保存")
-        return jsonify({"success": True})
+        # 同时保存到数据库
+        try:
+            with app.app_context():
+                from models import UserConfig
+                descriptions = {
+                    "cookies": "雪球登录 Cookies",
+                    "portfolio_code": "默认组合代码",
+                    "target_portfolio_code": "目标跟踪组合代码",
+                    "simulator_gid": "模拟仓 GID",
+                    "my_portfolio_code": "我的组合代码列表",
+                    "track_interval": "轮询间隔（秒）",
+                    "initial_assets": "初始资产",
+                    "portfolio_market": "组合市场（cn/us）"
+                }
+                for key, value in data.items():
+                    if key != "cookies_preview":
+                        UserConfig.set(
+                            key=key,
+                            value=value,
+                            description=descriptions.get(key, f"配置项: {key}")
+                        )
+        except Exception as db_error:
+            add_log("warning", f"配置保存到数据库失败（已保存到文件）: {db_error}")
+        
+        # 如果 cookies 变化，检查是否有运行中的脚本需要重启
+        scripts_to_restart = []
+        if cookies_changed:
+            # 检查哪些脚本正在运行（这些脚本可能使用了旧的 cookies）
+            for script_id in running_processes.keys():
+                scripts_to_restart.append(script_id)
+        
+        add_log("info", "配置已保存到文件和数据库")
+        
+        response_data = {"success": True}
+        if cookies_changed and scripts_to_restart:
+            response_data["warning"] = f"Cookies 已更新，建议重启以下运行中的脚本: {', '.join(scripts_to_restart)}"
+            response_data["scripts_to_restart"] = scripts_to_restart
+        
+        return jsonify(response_data)
     except Exception as e:
         add_log("error", f"保存配置失败: {e}")
         return jsonify({"success": False, "error": str(e)})

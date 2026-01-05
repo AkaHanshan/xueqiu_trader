@@ -442,7 +442,31 @@ async function saveConfig() {
 
         if (data.success) {
             currentConfig = { ...newConfig };  // 更新当前配置
-            toast('配置保存成功!');
+            
+            // 检查是否有警告（如 cookies 变化需要重启脚本）
+            if (data.warning && data.scripts_to_restart && data.scripts_to_restart.length > 0) {
+                const scriptNames = data.scripts_to_restart.map(id => SCRIPTS[id] || id).join('、');
+                const shouldRestart = confirm(`${data.warning}\n\n是否立即重启这些脚本？`);
+                
+                if (shouldRestart) {
+                    // 依次重启脚本
+                    for (const scriptId of data.scripts_to_restart) {
+                        if (state.runningScripts[scriptId]) {
+                            // 先停止
+                            await fetch(`/api/scripts/${scriptId}/stop`, { method: 'POST' });
+                            // 等待一下再启动
+                            await new Promise(resolve => setTimeout(resolve, 1000));
+                            // 再启动
+                            await fetch(`/api/scripts/${scriptId}/start`, { method: 'POST' });
+                        }
+                    }
+                    toast('配置已保存，相关脚本已重启!', 'success');
+                } else {
+                    toast('配置已保存! ' + data.warning, 'success');
+                }
+            } else {
+                toast('配置保存成功!');
+            }
 
             // 重新加载组合名称
             loadPortfolioName('portfolio_code', newConfig.portfolio_code);
