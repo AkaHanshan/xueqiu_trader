@@ -1,4 +1,4 @@
-# XueQiu Trader - 雪球组合交易与跟踪系统
+    # XueQiu Trader - 雪球组合交易与跟踪系统
 
 基于 [easytrader](https://github.com/shidenggui/easytrader) 实现的雪球组合调仓、跟踪和模拟交易功能。
 
